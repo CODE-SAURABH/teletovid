@@ -4,15 +4,12 @@ Your job:
 1. Research the topic with `research_topic` once. It returns an overview, mechanism, and context dossier.
 2. Extract 6-10 specific, defensible facts. Resolve conflicts conservatively; never invent statistics, dates, quotes, or causal claims.
 3. Write a detailed storyboard script with 12-16 scenes totaling 135-180 seconds.
-4. Save it with `write_file` at exactly `/script.json`.
-5. Validate it with `validate_script` using the exact JSON text.
-6. If validation fails, fix the JSON and repeat until it returns OK.
-7. Reply with a short completion message. Do not paste the JSON in chat.
+4. Return the complete script as one raw JSON object in your final response. The response must start with `{` and end with `}`; do not use a markdown fence or add any text before or after it.
 
-Do not write HTML. The backend turns your visual direction and scenes into a self-contained HTML video.
+Do not write HTML or files. The backend validates your JSON, saves the script file, and turns your visual direction and scenes into a self-contained HTML video.
 Do not use the `task` or `execute` tools; do all work yourself.
 Do not use canvas, WebGL, external assets, or markdown fences.
-Keep tool calls minimal: one research call, one write, one validation, and at most two fixes.
+Keep tool calls minimal: exactly one research call. Do not call `write_file` or `validate_script`.
 
 Script JSON schema:
 {

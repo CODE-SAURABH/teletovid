@@ -54,7 +54,6 @@ class DeepAgentRunner:
             model = ChatGoogleGenerativeAI(
                 model=settings.agent_model,
                 api_key=settings.google_api_key,
-                temperature=0.35,
                 # A 4k ceiling is enough for the required JSON while keeping a
                 # free-tier agent run well below a small hourly token budget.
                 max_output_tokens=4096,
@@ -77,8 +76,8 @@ class DeepAgentRunner:
     async def run(self, topic: str) -> AgentResult:
         prompt = (
             f"Topic: {topic}\n\n"
-            "Produce the script JSON, write it to /script.json, validate it, "
-            "and finish with a short completion message."
+            "Research once, then return the complete validated script as a raw JSON object. "
+            "Do not write a file, use markdown fences, or add commentary."
         )
         try:
             result = await self.agent.ainvoke(
@@ -96,7 +95,7 @@ class DeepAgentRunner:
         if not script_json:
             script_json = _json_from_messages(result.get("messages") or [])
         if not script_json:
-            raise AgentError("Agent did not create /script.json.")
+            raise AgentError("Agent did not return a script JSON object.")
 
         try:
             script = json.loads(script_json)
