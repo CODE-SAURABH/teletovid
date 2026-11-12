@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
 from langchain_core.messages import HumanMessage
+from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 if __package__:
@@ -54,7 +55,15 @@ class DeepAgentRunner:
                 model=settings.agent_model,
                 api_key=settings.google_api_key,
                 temperature=0.35,
-                max_output_tokens=8192,
+                # A 4k ceiling is enough for the required JSON while keeping a
+                # free-tier agent run well below a small hourly token budget.
+                max_output_tokens=4096,
+                # DeepAgent makes multiple model calls per job. Keep them below
+                # the small free-tier Gemini RPM quota rather than bursting.
+                rate_limiter=InMemoryRateLimiter(
+                    requests_per_second=self.settings.agent_requests_per_minute / 60,
+                    max_bucket_size=1,
+                ),
             )
             self.agent = create_deep_agent(
                 model=model,

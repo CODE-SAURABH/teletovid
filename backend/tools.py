@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from html.parser import HTMLParser
@@ -21,10 +22,10 @@ ALLOWED_SCENE_TYPES = {
     "chat",
     "outro",
 }
-MIN_DURATION = 90.0
-MAX_DURATION = 120.0
-MIN_SCENES = 8
-MAX_SCENES = 12
+MIN_DURATION = 135.0
+MAX_DURATION = 180.0
+MIN_SCENES = 12
+MAX_SCENES = 16
 
 
 class _ResultParser(HTMLParser):
@@ -100,25 +101,47 @@ async def _search(query: str, max_results: int) -> List[Dict[str, str]]:
 
 @tool
 async def research_topic(query: str, max_results: int = 5) -> str:
-    """Search DuckDuckGo for short, factual research notes about a topic."""
+    """Research a topic across overview, mechanism, and evidence searches."""
     query = (query or "").strip()
     if not query:
         return "FAIL: query is empty."
-    max_results = max(1, min(int(max_results), 6))
+    max_results = max(3, min(int(max_results), 6))
+    queries = [
+        ("OVERVIEW", query),
+        ("MECHANISM", f"{query} how it works evidence"),
+        ("CONTEXT", f"{query} data history implications official report"),
+    ]
     try:
-        results = await _search(query, max_results)
+        batches = await asyncio.gather(
+            *(_search(search_query, max_results) for _, search_query in queries)
+        )
     except Exception as exc:
         return f"FAIL: web search unavailable ({exc}). Use model knowledge and flag uncertainty."
 
+    results: List[tuple[str, Dict[str, str]]] = []
+    seen_urls = set()
+    for (label, _), batch in zip(queries, batches):
+        for item in batch:
+            url = item.get("url", "")
+            key = url.lower().rstrip("/") or item.get("title", "").lower()
+            if key and key not in seen_urls:
+                seen_urls.add(key)
+                results.append((label, item))
+            if len(results) >= 9:
+                break
+        if len(results) >= 12:
+            break
     if not results:
         return "No web results. Use model knowledge and flag uncertainty."
 
-    lines = [f"Search results for: {query}"]
-    for index, item in enumerate(results, start=1):
+    lines = [f"Research dossier for: {query}", "Use at least 4 distinct sources below."]
+    for index, (label, item) in enumerate(results, start=1):
         title = item.get("title") or "Untitled"
-        snippet = item.get("snippet") or ""
+        # Search snippets are leads, not source text. Keeping them bounded leaves
+        # the model enough hourly quota to write the actual explainer.
+        snippet = (item.get("snippet") or "")[:320]
         url = item.get("url") or ""
-        lines.append(f"{index}. {title}\n   {snippet}\n   {url}")
+        lines.append(f"{index}. [{label}] {title}\n   {snippet}\n   {url}")
     return "\n".join(lines)
 
 
@@ -149,12 +172,14 @@ def validate_script_text(script_json: str) -> str:
         errors.append(f"scenes must contain {MIN_SCENES}-{MAX_SCENES} entries (got {len(scenes)}).")
 
     total = 0.0
+    scene_types = set()
     for index, scene in enumerate(scenes):
         prefix = f"scenes[{index}]"
         if not isinstance(scene, dict):
             errors.append(f"{prefix} must be an object.")
             continue
         scene_type = str(scene.get("type") or "")
+        scene_types.add(scene_type)
         if scene_type not in ALLOWED_SCENE_TYPES:
             errors.append(f"{prefix}.type must be one of {sorted(ALLOWED_SCENE_TYPES)}.")
         try:
@@ -211,8 +236,28 @@ def validate_script_text(script_json: str) -> str:
     for scene in scenes:
         if isinstance(scene, dict):
             words += len(re.findall(r"[A-Za-z0-9']+", str(scene.get("narration") or "")))
-    if not (200 <= words <= 360):
-        errors.append(f"narration should be 200-360 words (got {words}).")
+    if not (420 <= words <= 650):
+        errors.append(f"narration should be 420-650 words (got {words}).")
+    if len(scene_types & ALLOWED_SCENE_TYPES) < 5:
+        errors.append("use at least 5 different scene types so the video does not repeat one layout.")
+
+    sources = data.get("sources")
+    if not isinstance(sources, list) or not (4 <= len(sources) <= 8):
+        errors.append("sources must contain 4-8 researched sources.")
+    elif isinstance(sources, list):
+        for index, source in enumerate(sources):
+            if not isinstance(source, dict):
+                errors.append(f"sources[{index}] must be an object.")
+                continue
+            if not str(source.get("title") or "").strip():
+                errors.append(f"sources[{index}].title is required.")
+            url = str(source.get("url") or "").strip()
+            if not re.match(r"https?://", url):
+                errors.append(f"sources[{index}].url must be an http(s) URL.")
+
+    visual = data.get("visual_style")
+    if not isinstance(visual, dict) or not str(visual.get("theme") or "").strip():
+        errors.append("visual_style.theme is required.")
 
     if errors:
         return _fail(errors)
@@ -221,7 +266,7 @@ def validate_script_text(script_json: str) -> str:
 
 @tool
 def validate_script(script_json: str) -> str:
-    """Validate a script JSON string against the 90-120 second storyboard contract."""
+    """Validate a script JSON string against the detailed storyboard contract."""
     return validate_script_text(script_json)
 
 

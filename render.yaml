@@ -24,7 +24,9 @@ services:
       - key: AGENT_TIMEOUT
         value: "600"
       - key: AGENT_MAX_STEPS
-        value: "24"
+        value: "10"
+      - key: AGENT_REQUESTS_PER_MINUTE
+        value: "4"
       - key: DAILY_JOB_LIMIT
         value: "3"
       - key: SELF_PING_SECONDS

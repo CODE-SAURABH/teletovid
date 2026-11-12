@@ -3,7 +3,7 @@
 The bot accepts a topic, runs a LangChain DeepAgent on Google Gemini, and returns
 two files:
 
-- `<slug>.html` - a self-contained 9:16 MCP-style explainer, 90-120 seconds
+- `<slug>.html` - a self-contained 9:16 topic-directed explainer, 135-180 seconds
 - `<slug>-script.json` - the storyboard script used to render the HTML
 
 No database, TTS, MP4 rendering, or approval step is used. State is in memory and
@@ -30,7 +30,8 @@ OWNER_TELEGRAM_ID=...
 GOOGLE_API_KEY=...
 AGENT_MODEL=gemini-3.6-flash
 AGENT_TIMEOUT=600
-AGENT_MAX_STEPS=24
+AGENT_MAX_STEPS=10
+AGENT_REQUESTS_PER_MINUTE=4
 DAILY_JOB_LIMIT=3
 SELF_PING_SECONDS=840
 LOG_LEVEL=INFO

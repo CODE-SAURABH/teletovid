@@ -23,6 +23,7 @@ class Settings:
     agent_model: str
     agent_timeout: float
     agent_max_steps: int
+    agent_requests_per_minute: int
     daily_job_limit: int
     self_ping_url: Optional[str]
     self_ping_seconds: int
@@ -93,7 +94,10 @@ def load_settings() -> Settings:
         google_api_key=google_api_key,
         agent_model=(os.getenv("AGENT_MODEL") or "gemini-3.6-flash").strip(),
         agent_timeout=_env_float("AGENT_TIMEOUT", 600.0),
-        agent_max_steps=max(10, _env_int("AGENT_MAX_STEPS", 24)),
+        # Research, write, validate, and a small correction allowance. More
+        # turns are expensive and can burst through a 5-RPM free-tier quota.
+        agent_max_steps=max(10, _env_int("AGENT_MAX_STEPS", 10)),
+        agent_requests_per_minute=max(1, _env_int("AGENT_REQUESTS_PER_MINUTE", 4)),
         daily_job_limit=max(1, _env_int("DAILY_JOB_LIMIT", 3)),
         self_ping_url=self_ping_url,
         self_ping_seconds=max(120, _env_int("SELF_PING_SECONDS", 840)),

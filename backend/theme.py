@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import hashlib
 import json
 import re
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,7 @@ ALLOWED_TYPES = {
     "chat",
     "outro",
 }
+ALLOWED_THEMES = {"blueprint", "editorial", "signal", "archive", "neon"}
 
 
 def _esc(value: Any) -> str:
@@ -143,6 +145,12 @@ def render_html(script: Dict[str, Any]) -> str:
     scenes = script.get("scenes") or []
     title = _text(script.get("title")) or "Explained"
     brand = _text(script.get("brand")) or f"{title.upper()} · EXPLAINED"
+    visual_style = script.get("visual_style") if isinstance(script.get("visual_style"), dict) else {}
+    requested_theme = _text(visual_style.get("theme")).lower()
+    if requested_theme not in ALLOWED_THEMES:
+        requested_theme = sorted(ALLOWED_THEMES)[
+            int(hashlib.sha256(title.encode("utf-8")).hexdigest(), 16) % len(ALLOWED_THEMES)
+        ]
     total = 0.0
     durations: List[Dict[str, float]] = []
     sections: List[str] = []
@@ -173,6 +181,7 @@ def render_html(script: Dict[str, Any]) -> str:
     return (
         HTML_TEMPLATE.replace("__TITLE__", safe_title)
         .replace("__BRAND__", safe_brand)
+        .replace("__THEME__", requested_theme)
         .replace("__SCENES__", scenes_json)
         .replace("__DURATION__", duration_text)
         .replace("__BODY__", "\n".join(sections))
@@ -259,11 +268,17 @@ body{font-family:Inter,"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;colo
 #progress{position:absolute;left:6cqw;right:6cqw;bottom:4.6cqw;height:.7cqw;border-radius:99px;background:#ffffff14;z-index:9;overflow:hidden}
 #progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--a),var(--b));box-shadow:0 0 2cqw #38bdf899}
 #counter{position:absolute;right:6cqw;bottom:7cqw;z-index:9;font:700 2.4cqw ui-monospace,monospace;color:#7f8db3;letter-spacing:.12em}
+/* Topic-directed art directions selected by the script. */
+.theme-blueprint{--page:#06131d;--fg:#e5f7ff;--mut:#93b8c9;--line:#28566d;--a:#37d4ff;--b:#4c89ff}.theme-blueprint .grid{opacity:.9;background-size:4cqw 4cqw}.theme-blueprint .card,.theme-blueprint .step{border-radius:.8cqw;background:#092130cc}.theme-blueprint .camera{justify-content:flex-start;padding-top:25cqw}
+.theme-editorial{--page:#241712;--fg:#fff8ee;--mut:#d7bca6;--line:#704532;--a:#ffbb70;--b:#df6c56}.theme-editorial .grid{display:none}.theme-editorial .blob{filter:blur(18cqw);opacity:.7}.theme-editorial .card{border-left-color:var(--b);border-radius:0;background:#372018dd}.theme-editorial .hd{font-family:Georgia,serif;letter-spacing:-.04em}.theme-editorial .camera{padding-left:9cqw;padding-right:9cqw}
+.theme-signal{--page:#100b24;--fg:#faf5ff;--mut:#c3aedc;--line:#523a80;--a:#f472d0;--b:#8b5cf6}.theme-signal .grid{transform:skewY(-12deg);opacity:.72}.theme-signal .big{font-size:18cqw}.theme-signal .card{border-radius:5cqw;background:linear-gradient(100deg,#2b164c,#17112f)}.theme-signal .camera{gap:4.4cqw}
+.theme-archive{--page:#1b1a14;--fg:#fffde9;--mut:#c6c19e;--line:#696444;--a:#e8cb63;--b:#b5813c}.theme-archive .grid{background-size:9cqw 9cqw;opacity:.25}.theme-archive .blob{opacity:.2;mix-blend-mode:normal}.theme-archive .card,.theme-archive .step{border-radius:0;background:#292619e8;box-shadow:none}.theme-archive .kicker{color:var(--a)}
+.theme-neon{--page:#05030d;--fg:#f5efff;--mut:#b4a9cf;--line:#54327b;--a:#35f2ca;--b:#dc4cff}.theme-neon .grid{opacity:.75;background-size:3cqw 3cqw}.theme-neon .blob{opacity:.85}.theme-neon .card{border-left-color:var(--b);box-shadow:0 0 5cqw #b739ce44}.theme-neon .handle{background:linear-gradient(90deg,var(--a),var(--b))}
 </style>
 </head>
 <body>
 <div id="fit">
-<div id="stage">
+<div id="stage" class="theme-__THEME__">
   <div class="bg">
     <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
     <div class="grid"></div><div class="vignette"></div><div class="grain"></div>
