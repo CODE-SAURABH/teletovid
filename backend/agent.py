@@ -14,11 +14,21 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 if __package__:
     from .config import Settings, ConfigError
     from .theme import render_html, validate_html
-    from .tools import TOOLS, validate_script_text
+    from .tools import (
+        TOOLS,
+        reset_last_valid_script,
+        take_last_valid_script,
+        validate_script_text,
+    )
 else:
     from config import Settings, ConfigError
     from theme import render_html, validate_html
-    from tools import TOOLS, validate_script_text
+    from tools import (
+        TOOLS,
+        reset_last_valid_script,
+        take_last_valid_script,
+        validate_script_text,
+    )
 
 
 class AgentError(RuntimeError):
@@ -54,9 +64,9 @@ class DeepAgentRunner:
             model = ChatGoogleGenerativeAI(
                 model=settings.agent_model,
                 api_key=settings.google_api_key,
-                # A 4k ceiling is enough for the required JSON while keeping a
-                # free-tier agent run well below a small hourly token budget.
-                max_output_tokens=4096,
+                # The validated script can be several thousand tokens; 8k leaves
+                # room for the full JSON without truncating the final answer.
+                max_output_tokens=8192,
                 # DeepAgent makes multiple model calls per job. Keep them below
                 # the small free-tier Gemini RPM quota rather than bursting.
                 rate_limiter=InMemoryRateLimiter(
@@ -76,9 +86,11 @@ class DeepAgentRunner:
     async def run(self, topic: str) -> AgentResult:
         prompt = (
             f"Topic: {topic}\n\n"
-            "Research once, then return the complete validated script as a raw JSON object. "
-            "Do not write a file, use markdown fences, or add commentary."
+            "Research once, then call validate_script with the complete raw JSON "
+            "object. If it returns FAIL, fix the JSON and call it again. When it "
+            "returns OK, reply DONE. Do not write files or HTML."
         )
+        reset_last_valid_script()
         try:
             result = await self.agent.ainvoke(
                 {"messages": [HumanMessage(content=prompt)]},
@@ -91,9 +103,11 @@ class DeepAgentRunner:
             raise AgentError("Agent returned an unexpected result.")
 
         files = result.get("files") or {}
-        script_json = _find_file(files, "script.json")
-        if not script_json:
-            script_json = _json_from_messages(result.get("messages") or [])
+        script_json = (
+            take_last_valid_script()
+            or _find_file(files, "script.json")
+            or _json_from_messages(result.get("messages") or [])
+        )
         if not script_json:
             raise AgentError("Agent did not return a script JSON object.")
 
@@ -155,12 +169,27 @@ def _file_content(data: Any) -> Optional[str]:
 
 def _json_from_messages(messages: List[Any]) -> Optional[str]:
     for message in reversed(messages):
-        content = getattr(message, "content", None)
+        role = getattr(message, "type", None)
+        if role is None and isinstance(message, dict):
+            role = message.get("role") or message.get("type")
+        if role not in (None, "ai", "AIMessage", "assistant"):
+            continue
+        if getattr(message, "tool_calls", None):
+            continue
+        content = (
+            message.get("content")
+            if isinstance(message, dict)
+            else getattr(message, "content", None)
+        )
         if isinstance(content, list):
-            text = "".join(
-                str(part.get("text", "")) if isinstance(part, dict) else str(part)
-                for part in content
-            )
+            parts = []
+            for part in content:
+                if isinstance(part, str):
+                    parts.append(part)
+                elif isinstance(part, dict):
+                    if part.get("type") in ("text", "text_delta") or "text" in part:
+                        parts.append(str(part.get("text") or ""))
+            text = "".join(parts)
         else:
             text = str(content or "")
         start = text.find("{")
@@ -168,8 +197,9 @@ def _json_from_messages(messages: List[Any]) -> Optional[str]:
         if start >= 0 and end > start:
             candidate = text[start : end + 1]
             try:
-                json.loads(candidate)
+                parsed = json.loads(candidate)
             except json.JSONDecodeError:
                 continue
-            return candidate
+            if isinstance(parsed, dict) and isinstance(parsed.get("scenes"), list):
+                return candidate
     return None

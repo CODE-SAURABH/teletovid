@@ -3,7 +3,7 @@
 The bot accepts a topic, runs a LangChain DeepAgent on Google Gemini, and returns
 two files:
 
-- `<slug>.html` - a self-contained 9:16 topic-directed explainer, 135-180 seconds
+- `<slug>.html` - a self-contained 9:16 topic-directed explainer, 180-240 seconds
 - `<slug>-script.json` - the storyboard script used to render the HTML
 
 No database, TTS, MP4 rendering, or approval step is used. State is in memory and
@@ -15,8 +15,8 @@ resets when the process restarts.
 - `pipeline.py` - one-job worker, cancellation, retries, and file delivery
 - `agent.py` - DeepAgent + Gemini runner and script extraction
 - `prompts/agent.md` - editable agent system prompt
-- `tools.py` - DuckDuckGo research tool and script validator
-- `theme.py` - deterministic HTML/CSS/JS renderer
+- `tools.py` - research searches, source-page excerpts, and script validation
+- `theme.py` - deterministic HTML/CSS/JS renderer with topic layouts
 - `health.py` - stdlib `/healthz` server for Render
 - `config.py` / `state.py` - settings and in-memory jobs
 
@@ -30,7 +30,7 @@ OWNER_TELEGRAM_ID=...
 GOOGLE_API_KEY=...
 AGENT_MODEL=gemini-3.6-flash
 AGENT_TIMEOUT=600
-AGENT_MAX_STEPS=10
+AGENT_MAX_STEPS=24
 AGENT_REQUESTS_PER_MINUTE=4
 DAILY_JOB_LIMIT=3
 SELF_PING_SECONDS=840
@@ -38,7 +38,9 @@ LOG_LEVEL=INFO
 ```
 
 The agent's instructions live in `backend/prompts/agent.md`. Edit that file and
-restart/redeploy to apply changes.
+restart/redeploy to apply changes. The agent chooses a topic structure and a
+layout for each scene; the renderer keeps the same self-contained visual theme
+system while changing the composition and scene types.
 
 Get the Gemini key from Google AI Studio. Free-tier limits apply. `AGENT_MODEL`
 can be set to another free Gemini model, such as `gemini-3.5-flash-lite`.

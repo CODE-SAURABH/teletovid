@@ -15,9 +15,31 @@ ALLOWED_TYPES = {
     "bigNumber",
     "code",
     "chat",
+    "compare",
+    "timeline",
+    "stat",
+    "quote",
+    "mythFact",
     "outro",
 }
 ALLOWED_THEMES = {"blueprint", "editorial", "signal", "archive", "neon"}
+ALLOWED_LAYOUTS = {"stack", "split", "spotlight", "compare", "timeline", "metric", "quote"}
+ALLOWED_STRUCTURES = {"system", "timeline", "argument", "profile", "fieldguide"}
+DEFAULT_LAYOUTS = {
+    "title": "spotlight",
+    "statement": "split",
+    "bullets": "stack",
+    "steps": "timeline",
+    "bigNumber": "metric",
+    "code": "split",
+    "chat": "stack",
+    "compare": "compare",
+    "timeline": "timeline",
+    "stat": "metric",
+    "quote": "quote",
+    "mythFact": "compare",
+    "outro": "spotlight",
+}
 
 
 def _esc(value: Any) -> str:
@@ -57,6 +79,9 @@ def _scene_markup(scene: Dict[str, Any], index: int) -> str:
     scene_type = str(scene.get("type") or "statement")
     if scene_type not in ALLOWED_TYPES:
         scene_type = "statement"
+    layout = _text(scene.get("layout")).lower()
+    if layout not in ALLOWED_LAYOUTS:
+        layout = DEFAULT_LAYOUTS.get(scene_type, "stack")
     title = _text(scene.get("title"))
     body = _text(scene.get("body"))
     items = _items(scene)
@@ -128,6 +153,59 @@ def _scene_markup(scene: Dict[str, Any], index: int) -> str:
             + f'<h2 class="hd rv">{_esc(title)}</h2>'
             + f'<div class="chat">{"".join(bubbles)}</div>'
         )
+    elif scene_type == "compare":
+        cards = "".join(
+            f'<div class="cmp rv" style="--i:{i}"><b>{_esc(item["label"] or "•")}</b>'
+            f'<span>{_esc(item["text"])}</span></div>'
+            for i, item in enumerate(items)
+        )
+        inner = (
+            _kicker(scene, index)
+            + f'<h2 class="hd rv">{_esc(title)}</h2>'
+            + f'<div class="compare">{cards}</div>'
+            + (f'<p class="note rv">{_esc(body)}</p>' if body else "")
+        )
+    elif scene_type == "timeline":
+        nodes = "".join(
+            f'<div class="tl rv" style="--i:{i}"><i>{_esc(item["label"])}</i>'
+            f'<span>{_esc(item["text"])}</span></div>'
+            for i, item in enumerate(items)
+        )
+        inner = (
+            _kicker(scene, index)
+            + f'<h2 class="hd rv">{_esc(title)}</h2>'
+            + f'<div class="timeline">{nodes}</div>'
+        )
+    elif scene_type == "stat":
+        cards = "".join(
+            f'<div class="stat rv" style="--i:{i}"><b>{_esc(item["label"])}</b>'
+            f'<span>{_esc(item["text"])}</span></div>'
+            for i, item in enumerate(items)
+        )
+        inner = (
+            _kicker(scene, index)
+            + f'<h2 class="hd rv">{_esc(title)}</h2>'
+            + f'<div class="stats">{cards}</div>'
+            + (f'<p class="note rv">{_esc(body)}</p>' if body else "")
+        )
+    elif scene_type == "quote":
+        attribution = _text(scene.get("attribution"))
+        inner = (
+            _kicker(scene, index)
+            + f'<h2 class="hd rv">{_esc(title)}</h2>'
+            + f'<blockquote class="quote rv">{_esc(body)}</blockquote>'
+            + (f'<div class="attr rv">{_esc(attribution)}</div>' if attribution else "")
+        )
+    elif scene_type == "mythFact":
+        fact = _text(scene.get("fact"))
+        inner = (
+            _kicker(scene, index)
+            + f'<h2 class="hd rv">{_esc(title)}</h2>'
+            + '<div class="mythfact">'
+            + f'<div class="mf myth rv"><em>MYTH</em><p>{_esc(body)}</p></div>'
+            + f'<div class="mf fact rv"><em>REALITY</em><p>{_esc(fact)}</p></div>'
+            + "</div>"
+        )
     else:
         inner = (
             _kicker(scene, index)
@@ -136,7 +214,7 @@ def _scene_markup(scene: Dict[str, Any], index: int) -> str:
         )
 
     return (
-        f'<section class="scene type-{scene_type}" id="scene-{index}" '
+        f'<section class="scene type-{scene_type} layout-{layout}" id="scene-{index}" '
         f'data-type="{scene_type}"><div class="camera">{inner}</div></section>'
     )
 
@@ -151,6 +229,15 @@ def render_html(script: Dict[str, Any]) -> str:
         requested_theme = sorted(ALLOWED_THEMES)[
             int(hashlib.sha256(title.encode("utf-8")).hexdigest(), 16) % len(ALLOWED_THEMES)
         ]
+    structure = _text(visual_style.get("structure")).lower()
+    if structure not in ALLOWED_STRUCTURES:
+        structure = {
+            "blueprint": "system",
+            "editorial": "profile",
+            "signal": "argument",
+            "archive": "timeline",
+            "neon": "system",
+        }.get(requested_theme, "system")
     total = 0.0
     durations: List[Dict[str, float]] = []
     sections: List[str] = []
@@ -166,7 +253,7 @@ def render_html(script: Dict[str, Any]) -> str:
         sections.append(_scene_markup(scene, index))
 
     if total <= 0:
-        total = 90.0
+        total = 180.0
         durations = [{"duration": total}]
         sections = [
             '<section class="scene type-title active" id="scene-0"><div class="camera">'
@@ -182,6 +269,7 @@ def render_html(script: Dict[str, Any]) -> str:
         HTML_TEMPLATE.replace("__TITLE__", safe_title)
         .replace("__BRAND__", safe_brand)
         .replace("__THEME__", requested_theme)
+        .replace("__STRUCTURE__", structure)
         .replace("__SCENES__", scenes_json)
         .replace("__DURATION__", duration_text)
         .replace("__BODY__", "\n".join(sections))
@@ -264,6 +352,45 @@ body{font-family:Inter,"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;colo
 .code{position:relative;overflow:hidden;background:#070b18;border:.28cqw solid var(--line);border-radius:3cqw;padding:3.6cqw 4cqw;font:500 3cqw/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#cbd5f5;box-shadow:0 4cqw 12cqw #00000088}
 .cline{white-space:pre;overflow:hidden;width:0}
 .cline span{display:block;white-space:pre}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:2.2cqw;align-items:stretch}
+.cmp{display:flex;flex-direction:column;gap:1.4cqw;padding:3cqw;border-radius:2.8cqw;background:linear-gradient(180deg,#151d3d,#10162e);border:.28cqw solid var(--line);box-shadow:0 2cqw 6cqw #00000055}
+.cmp b{font-size:3.8cqw;color:var(--a);line-height:1.15}
+.cmp span{font-size:3.1cqw;color:var(--fg);line-height:1.3}
+.timeline{position:relative;display:flex;flex-direction:column;gap:2.4cqw;padding-left:2cqw}
+.timeline:before{content:"";position:absolute;left:1.1cqw;top:1.2cqw;bottom:1.2cqw;width:.35cqw;border-radius:99px;background:linear-gradient(180deg,var(--a),var(--b))}
+.tl{position:relative;padding-left:4.6cqw}
+.tl:before{content:"";position:absolute;left:0;top:1.2cqw;width:2.2cqw;height:2.2cqw;border-radius:50%;background:var(--a);box-shadow:0 0 2cqw var(--a)}
+.tl i{display:block;font-size:2.9cqw;line-height:1.1;color:var(--a);font-weight:900;font-style:normal;letter-spacing:.08em;text-transform:uppercase}
+.tl span{display:block;margin-top:.8cqw;font-size:3.3cqw;line-height:1.32;color:var(--fg)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:2.2cqw}
+.stat{padding:3.2cqw 3.4cqw;border-radius:2.8cqw;background:linear-gradient(180deg,#151d3d,#10162e);border:.28cqw solid var(--line)}
+.stat b{display:block;font-size:7.4cqw;line-height:1;letter-spacing:-.05em;background:linear-gradient(92deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat span{display:block;margin-top:1.2cqw;font-size:2.9cqw;line-height:1.3;color:var(--mut)}
+.quote{margin:0;font-size:6.4cqw;line-height:1.18;font-weight:750;letter-spacing:-.03em;color:var(--fg)}
+.attr{margin-top:1.6cqw;font-size:3.1cqw;color:var(--a);letter-spacing:.14em;text-transform:uppercase;font-weight:800}
+.mythfact{display:flex;flex-direction:column;gap:2.2cqw}
+.mf{padding:3cqw 3.6cqw;border-radius:2.4cqw;background:#111731;border:.28cqw solid var(--line);border-left:1.1cqw solid var(--line)}
+.mf.myth{border-left-color:var(--r)}
+.mf.fact{border-left-color:var(--c)}
+.mf em{display:block;font-size:2.5cqw;letter-spacing:.22em;font-style:normal;font-weight:900;color:var(--mut)}
+.mf p{margin:1cqw 0 0;font-size:3.5cqw;line-height:1.32;color:var(--fg)}
+.layout-spotlight .camera{align-items:center;text-align:center;justify-content:center;gap:4cqw}
+.layout-spotlight .hd{font-size:9.4cqw}
+.layout-spotlight .rule{align-self:center}
+.layout-split .camera{justify-content:space-between;padding-top:24cqw;padding-bottom:19cqw}
+.layout-split .hd{font-size:7.2cqw}
+.layout-compare .cards{display:grid;grid-template-columns:1fr 1fr;gap:2.2cqw}
+.layout-compare .card{flex-direction:column;align-items:flex-start;gap:1.2cqw}
+.layout-metric .big{font-size:18cqw}
+.layout-quote .camera{justify-content:center;gap:4cqw}
+.layout-timeline .steps{gap:2cqw}
+.layout-timeline .step{background:transparent;border:0;border-left:.45cqw solid var(--line);border-radius:0;padding-left:4cqw;position:relative}
+.layout-timeline .step i{position:absolute;left:-4.4cqw;top:2.8cqw;width:4.2cqw;height:4.2cqw;font-size:2.5cqw;background:var(--a);color:#06101f}
+.structure-timeline .grid{transform:skewY(-9deg);opacity:.32;background-size:5cqw 7cqw}
+.structure-argument .brand{letter-spacing:.3em}
+.structure-profile .blob{filter:blur(20cqw);opacity:.7}
+.structure-fieldguide .grid{opacity:.42;background-size:5cqw 5cqw}
+.structure-system .grid{opacity:.78;background-size:4cqw 4cqw}
 .handle{align-self:center;padding:2.2cqw 4.8cqw;border-radius:99px;background:linear-gradient(90deg,var(--a),var(--b));color:#06101f;font-weight:900;font-size:3.6cqw;letter-spacing:.12em;box-shadow:0 2cqw 6cqw #38bdf833}
 #progress{position:absolute;left:6cqw;right:6cqw;bottom:4.6cqw;height:.7cqw;border-radius:99px;background:#ffffff14;z-index:9;overflow:hidden}
 #progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--a),var(--b));box-shadow:0 0 2cqw #38bdf899}
@@ -278,7 +405,7 @@ body{font-family:Inter,"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;colo
 </head>
 <body>
 <div id="fit">
-<div id="stage" class="theme-__THEME__">
+<div id="stage" class="theme-__THEME__ structure-__STRUCTURE__">
   <div class="bg">
     <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
     <div class="grid"></div><div class="vignette"></div><div class="grain"></div>
